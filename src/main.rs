@@ -68,7 +68,7 @@ async fn main() {
         let message_string = match String::from_utf8(message.data) {
             Ok(message) => message,
             Err(_) => {
-                println!("not a password");
+                println!("this is not utf8");
                 continue
             },
         };
@@ -102,9 +102,12 @@ async fn main() {
             let spawnpoint = empty_spots.get(rng.gen_range(0..empty_spots.len())).unwrap();
 
             client.rover = Some(Rover::new(args[0].to_owned(), spawnpoint.x as i32, spawnpoint.y as i32, mars.clone()));
+            println!("{:?} just logged on", args[0]);
             continue;
         }
         let rover = client.rover.as_mut().unwrap();
+
+        println!("{}: {} {:?}", rover.username, command, args);
 
         match command {
             "position" => {

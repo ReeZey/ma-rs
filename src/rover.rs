@@ -14,7 +14,7 @@ pub struct Rover {
 
 impl Rover {
     pub async fn forward(&mut self) {
-        let mut motion = Motion { x: 0, y: 0};
+        let mut motion = Vector2 { x: 0, y: 0};
         match self.rotation {
             Compass::North => motion.y -= 1,
             Compass::East => motion.x += 1,
@@ -24,7 +24,7 @@ impl Rover {
 
         let planet = self.planet.as_mut().unwrap().lock().await;
 
-        let new_posotion = Motion {x: self.x as i32 + motion.x, y: self.y as i32 + motion.y};
+        let new_posotion = Vector2 {x: self.x as i32 + motion.x, y: self.y as i32 + motion.y};
 
         let cell_type = planet.get_cell_type(new_posotion.x as u32, new_posotion.y as u32);
 
@@ -100,10 +100,10 @@ impl Rover {
         let mut planet = self.planet.as_mut().unwrap().lock().await;
         
         let motion = match self.rotation {
-            Compass::North => Motion {x: 0, y: -1},
-            Compass::East => Motion {x: 1, y: 0},
-            Compass::South => Motion {x: 0, y: 1},
-            Compass::West => Motion {x: -1, y: 0},
+            Compass::North => Vector2 {x: 0, y: -1},
+            Compass::East => Vector2 {x: 1, y: 0},
+            Compass::South => Vector2 {x: 0, y: 1},
+            Compass::West => Vector2 {x: -1, y: 0},
         };
 
         let cell_front = planet.get_cell((self.x + motion.x) as u32, (self.y + motion.y) as u32);
@@ -144,7 +144,7 @@ pub enum Compass {
     West,
 }
 
-struct Motion {
+struct Vector2 {
     pub x: i32,
     pub y: i32,
 }

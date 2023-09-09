@@ -22,8 +22,8 @@ pub fn handle_client(stream: TcpStream, uuid: Uuid, send: Sender::<Message>, rec
                 continue;
             }
 
-            println!("received: {:?}", message.data);
-            println!("received: {:?}", String::from_utf8(message.data.clone()).unwrap());
+            //println!("received: {:?}", message.data);
+            //println!("received: {:?}", String::from_utf8(message.data.clone()).unwrap());
 
             let mut abc = writer.lock().await;
             abc.write(&message.data).await.unwrap();
