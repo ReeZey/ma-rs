@@ -2,6 +2,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::planet::{Planet, CellType};
 
+#[derive(Debug, Clone)]
 pub struct Rover {
     pub username: String,
     pub password: String,
@@ -112,12 +113,8 @@ impl Rover {
         }
         let cell_front = cell_front.unwrap();
 
-        if match cell_front.cell_type {
-            CellType::Air => true,
-            CellType::Rock => false,
-            CellType::Stone => false,
-            CellType::Bedrock => true,
-        } {
+
+        if cell_front.cell_type != CellType::Rock && cell_front.cell_type != CellType::Stone {
             return;
         }
         
@@ -126,17 +123,21 @@ impl Rover {
             CellType::Rock => 10,
             CellType::Stone => 100,
             CellType::Bedrock => 0,
+            CellType::Rover => 0,
+            CellType::Water => 0,
         };
 
         let cell_x = cell_front.x;
         let cell_y = cell_front.y;
 
+        println!("updated");
         planet.set_celltype(cell_x, cell_y, CellType::Air);
         self.points += price;
     }
 }
 
-#[derive(Debug)]
+
+#[derive(Debug, Clone)]
 pub enum Compass {
     North,
     East,
@@ -144,14 +145,15 @@ pub enum Compass {
     West,
 }
 
+#[derive(Debug, Clone)]
 struct Vector2 {
     pub x: i32,
     pub y: i32,
 }
 
 impl Rover {
-    pub fn new(username: String, x: i32, y: i32, planet: Arc<Mutex<Planet>>) -> Self {
-        Self { username, x, y, planet: Some(planet), ..Default::default() }
+    pub fn new(username: String, password: String, x: i32, y: i32, planet: Arc<Mutex<Planet>>) -> Self {
+        Self { username, password, x, y, planet: Some(planet), ..Default::default() }
     }
 }
 

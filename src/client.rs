@@ -23,7 +23,7 @@ pub fn handle_client(stream: TcpStream, uuid: Uuid, send: Sender::<Message>, rec
             }
 
             //println!("received: {:?}", message.data);
-            //println!("received: {:?}", String::from_utf8(message.data.clone()).unwrap());
+            println!("received: {:?}", String::from_utf8(message.data.clone()).unwrap());
 
             let mut abc = writer.lock().await;
             abc.write(&message.data).await.unwrap();
@@ -39,7 +39,9 @@ pub fn handle_client(stream: TcpStream, uuid: Uuid, send: Sender::<Message>, rec
             match reader.lock().await.read_buf(&mut buffer).await {
                 Ok(_) => {},
                 Err(error) => {
-                    println!("user disconnected: {}", error.kind());
+                    //TODO: better fix sometime maybe perhabs nah
+                    send.send_async(Message { author: uuid, target: server_uuid, data: format!("disconnected {}", error.kind().to_string().replace(" ", "_")).as_bytes().to_vec() }).await.unwrap();
+                    //println!("user disconnected: {}", error.kind());
                     break;
                 }
             };

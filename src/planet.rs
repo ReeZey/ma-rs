@@ -3,9 +3,9 @@ use std::fmt::Formatter;
 use std::fmt::Write;
 use std::io::Write as fmt;
 
+use bracket_noise::prelude::FastNoise;
 use rand::Rng;
 use strum::EnumIter;
-use strum::IntoEnumIterator;
 
 #[derive(Debug)]
 pub struct Planet {
@@ -21,19 +21,34 @@ impl Planet {
 
         let scatterness = 4;
 
+        let mut cell_types = vec![];
+        cell_types.push(CellType::Air);
+        cell_types.push(CellType::Rock);
+        //cell_types.push(CellType::Water);
+        cell_types.push(CellType::Stone);
+        cell_types.push(CellType::Bedrock);
+
+        let mut noise = FastNoise::new();
+        noise.set_seed(rng.gen_range(0..1000));
+
         for x in 0..size {
             for y in 0..size {
-                let cell_types = CellType::iter();
+                let cell_types = cell_types.iter();
                 let length = cell_types.len().pow(scatterness);
                 let index = length - rng.gen_range(0..length);
 
                 let mut cell_type = CellType::Air;
-                for (i, ct) in cell_types.clone().enumerate() {
-                    let number = cell_types.len() - (i + 1);
 
-                    if index > number.pow(scatterness) {
-                        cell_type = ct;
-                        break;
+                if noise.get_noise(x as f32 / 50.0, y as f32 / 50.0) > 0.5 {
+                    cell_type = CellType::Water;
+                } else {
+                    for (i, ct) in cell_types.clone().enumerate() {
+                        let number = cell_types.len() - (i + 1);
+    
+                        if index > number.pow(scatterness) {
+                            cell_type = ct.clone();
+                            break;
+                        }
                     }
                 }
 
@@ -50,7 +65,7 @@ impl Planet {
         return self.cells.clone();
     }
 
-    pub fn print_vec(&self) -> Vec<u8> {
+    pub fn print_ascii(&self) -> Vec<u8> {
         let mut buffer: Vec<u8> = vec![];
         for (index, cell) in self.cells.iter().enumerate() {
             if index != 0 && index % (self.size as usize) == 0 {
@@ -61,12 +76,25 @@ impl Planet {
         return buffer;
     }
 
+    pub fn color_buffer(&self) -> Vec<u8> {
+        let mut buffer = vec![];
+
+        for cell in self.cells.iter() {
+            let cell_color = cell.cell_type.get_color();
+            buffer.push(cell_color.r);
+            buffer.push(cell_color.g);
+            buffer.push(cell_color.b);
+        }
+
+        return buffer;
+    }
+
     pub fn get_cell(&self, x: u32, y: u32) -> Option<&Cell>  {
         return self.cells.get(x as usize + y as usize * self.size as usize);
     }
 
     pub fn get_cell_type(&self, x: u32, y: u32) -> CellType  {
-        return match self.cells.get(x as usize + y as usize * self.size as usize) {
+        return match self.get_cell(x, y) {
             Some(cell) => cell.cell_type,
             None => CellType::Bedrock,
         };
@@ -95,7 +123,9 @@ pub enum CellType {
     Air,
     Rock,
     Stone,
-    Bedrock
+    Bedrock,
+    Water,
+    Rover
 }
 
 impl Display for CellType {
@@ -105,6 +135,21 @@ impl Display for CellType {
             CellType::Rock => f.write_char('.'),
             CellType::Stone => f.write_char('o'),
             CellType::Bedrock => f.write_char('X'),
+            CellType::Rover => f.write_char('R'),
+            CellType::Water => f.write_char('W'),
+        }
+    }
+}
+
+impl CellColorTrait for CellType {
+    fn get_color(&self) -> CellColor {
+        match self {
+            CellType::Air => CellColor { r: 250, g: 165, b: 0 },
+            CellType::Rock => CellColor { r: 128, g: 100, b: 64 },
+            CellType::Stone => CellColor { r: 64, g: 64, b: 64 },
+            CellType::Bedrock => CellColor { r: 0, g: 0, b: 0 },
+            CellType::Water => CellColor { r: 0, g: 0, b: 255 },
+            CellType::Rover => CellColor { r: 255, g: 0, b: 0 },
         }
     }
 }
@@ -114,4 +159,14 @@ impl CellType {
     pub fn this_is_a_very_bad_fix(&self) -> String {
         return format!("{}", self);
     }
+}
+
+trait CellColorTrait {
+    fn get_color(&self) -> CellColor;
+}
+
+struct CellColor {
+    r: u8,
+    g: u8,
+    b: u8,
 }

@@ -5,6 +5,8 @@ mod rover;
 use std::collections::VecDeque;
 use std::fs;
 use std::sync::Arc;
+use image::ImageBuffer;
+use image::RgbImage;
 use planet::Planet;
 use planet::CellType;
 use planet::Cell;
@@ -17,23 +19,28 @@ use uuid::Uuid;
 
 #[tokio::main]
 async fn main() {
-    let mars = Planet::new(20);
+    let mars = Planet::new(100);
     
     let cells =  mars.cells();
     let air_cells: Vec<&Cell> = cells.iter().filter(|a| a.cell_type == CellType::Air).collect();
     let rock_cells: Vec<&Cell> = cells.iter().filter(|a| a.cell_type == CellType::Rock).collect();
     let stone_cells: Vec<&Cell> = cells.iter().filter(|a| a.cell_type == CellType::Stone).collect();
+    let water_cells: Vec<&Cell> = cells.iter().filter(|a| a.cell_type == CellType::Water).collect();
     let bedrock_cells: Vec<&Cell> = cells.iter().filter(|a| a.cell_type == CellType::Bedrock).collect();
 
     println!("--- planet stats ---");
-    println!("air: {} rock: {} stone: {} bedrock: {}", air_cells.len(), rock_cells.len(), stone_cells.len(), bedrock_cells.len());
+    println!("air: {} rock: {} stone: {} water: {} bedrock: {}", air_cells.len(), rock_cells.len(), stone_cells.len(), water_cells.len(),  bedrock_cells.len());
 
-    fs::write("map.txt", mars.print_vec()).unwrap();
+    fs::write("map.txt", mars.print_ascii()).unwrap();
 
     let clients = Arc::new(Mutex::new(vec![]));
     let server = TcpListener::bind("0.0.0.0:6969").await.unwrap();
 
     let server_uuid = Uuid::new_v4();
+
+    let mut img: RgbImage = ImageBuffer::new(100, 100);
+    img.copy_from_slice(&mars.color_buffer());
+    img.save("world.png").unwrap();
 
     let message_channel = flume::unbounded::<Message>();
     
@@ -48,6 +55,8 @@ async fn main() {
             handle_client(stream, uuid, sender.clone(), receiver.clone(), server_uuid);
         }
     });
+
+    let mut offline_rovers: Vec<Rover> = vec![];
 
     let mars: Arc<Mutex<Planet>> = Arc::new(Mutex::new(mars));
     let (sender, receiver) = message_channel;
@@ -88,21 +97,45 @@ async fn main() {
                 sender.send(Message { author: server_uuid, target: client.uuid, data: "not signed in".as_bytes().to_vec() }).unwrap();
                 continue;
             }
+
+            println!("login: {:?}", args);
+
             if args.len() != 2 {
                 sender.send(Message { author: server_uuid, target: client.uuid, data: "login failed".as_bytes().to_vec() }).unwrap();
                 continue;
             }
 
-            sender.send(Message { author: server_uuid, target: client.uuid, data: "login successful".as_bytes().to_vec() }).unwrap();   
+            let mut rover_index = None;
+            for (index, r) in offline_rovers.iter().enumerate() {
+                if args[0] == r.username {
+                    rover_index = Some(index);
+                    break;
+                }
+            }
 
-            let cells =  mars.lock().await.cells();
-            let empty_spots: Vec<&Cell> = cells.iter().filter(|a| a.cell_type == CellType::Air).collect();
+            println!("{:?}", rover_index);
 
-            let mut rng = rand::thread_rng();
-            let spawnpoint = empty_spots.get(rng.gen_range(0..empty_spots.len())).unwrap();
+            if rover_index.is_some() {
+                let rover_index = rover_index.unwrap();
+                if offline_rovers[rover_index].password != args[1] {
+                    sender.send(Message { author: server_uuid, target: client.uuid, data: "login failed".as_bytes().to_vec() }).unwrap();
+                    continue;
+                }
+                let rover = offline_rovers.remove(rover_index);
 
-            client.rover = Some(Rover::new(args[0].to_owned(), spawnpoint.x as i32, spawnpoint.y as i32, mars.clone()));
+                client.rover = Some(rover);
+            } else {
+                let cells =  mars.lock().await.cells();
+                let empty_spots: Vec<&Cell> = cells.iter().filter(|a| a.cell_type == CellType::Air).collect();
+    
+                let mut rng = rand::thread_rng();
+                let spawnpoint = empty_spots.get(rng.gen_range(0..empty_spots.len())).unwrap();
+    
+                client.rover = Some(Rover::new(args[0].to_owned(), args[1].to_owned(), spawnpoint.x as i32, spawnpoint.y as i32, mars.clone()));
+            }
+
             println!("{:?} just logged on", args[0]);
+            sender.send(Message { author: server_uuid, target: client.uuid, data: "login successful".as_bytes().to_vec() }).unwrap();
             continue;
         }
         let rover = client.rover.as_mut().unwrap();
@@ -122,6 +155,10 @@ async fn main() {
                 sender.send(Message { author: server_uuid, target: client.uuid, data: scan.as_bytes().to_vec() }).unwrap();
             }
             "dig" => rover.dig().await,
+            "disconnected" => {
+                println!("{:?} just logged off", rover.username);
+                offline_rovers.push(rover.clone());
+            }
             _ => {
                 println!("unknown command: {:?} {:?}", command, args);
             }
