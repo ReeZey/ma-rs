@@ -7,9 +7,12 @@ use bracket_noise::prelude::FastNoise;
 use rand::Rng;
 use strum::EnumIter;
 
+use crate::rover::Rover;
+
 #[derive(Debug)]
 pub struct Planet {
     cells: Vec<Cell>,
+    rovers: Vec<Rover>,
     size: u32
 }
 
@@ -31,23 +34,27 @@ impl Planet {
         let mut noise = FastNoise::new();
         noise.set_seed(rng.gen_range(0..1000));
 
-        for x in 0..size {
-            for y in 0..size {
+        for y in 0..size {
+            for x in 0..size {
                 let cell_types = cell_types.iter();
                 let length = cell_types.len().pow(scatterness);
                 let index = length - rng.gen_range(0..length);
 
                 let mut cell_type = CellType::Air;
 
-                if noise.get_noise(x as f32 / 50.0, y as f32 / 50.0) > 0.5 {
+                let noise_value = noise.get_noise(x as f32 / 35.0, y as f32 / 35.0);
+
+                if noise_value > 0.5 {
                     cell_type = CellType::Water;
                 } else {
-                    for (i, ct) in cell_types.clone().enumerate() {
-                        let number = cell_types.len() - (i + 1);
-    
-                        if index > number.pow(scatterness) {
-                            cell_type = ct.clone();
-                            break;
+                    if noise_value < 0.0 {
+                        for (i, ct) in cell_types.clone().enumerate() {
+                            let number = cell_types.len() - (i + 1);
+        
+                            if index > number.pow(scatterness) {
+                                cell_type = ct.clone();
+                                break;
+                            }
                         }
                     }
                 }
@@ -57,6 +64,7 @@ impl Planet {
         }
         return Planet {
             cells,
+            rovers: vec![],
             size
         }
     }
@@ -103,6 +111,10 @@ impl Planet {
     pub fn set_celltype(&mut self, x: u32, y: u32, cell_type: CellType) {
         self.cells[x as usize + y as usize * self.size as usize].cell_type = cell_type;
     }
+    
+    pub fn update_rovers(&mut self, rovers: Vec<Rover>) {
+        self.rovers = rovers;
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -141,7 +153,7 @@ impl Display for CellType {
     }
 }
 
-impl CellColorTrait for CellType {
+impl CellTrait for CellType {
     fn get_color(&self) -> CellColor {
         match self {
             CellType::Air => CellColor { r: 250, g: 165, b: 0 },
@@ -150,6 +162,17 @@ impl CellColorTrait for CellType {
             CellType::Bedrock => CellColor { r: 0, g: 0, b: 0 },
             CellType::Water => CellColor { r: 0, g: 0, b: 255 },
             CellType::Rover => CellColor { r: 255, g: 0, b: 0 },
+        }
+    }
+
+    fn mineable(&self) -> bool {
+        match self {
+            CellType::Air => false,
+            CellType::Rock => true,
+            CellType::Stone => true,
+            CellType::Bedrock => false,
+            CellType::Water => false,
+            CellType::Rover => false,
         }
     }
 }
@@ -161,11 +184,12 @@ impl CellType {
     }
 }
 
-trait CellColorTrait {
+pub trait CellTrait {
     fn get_color(&self) -> CellColor;
+    fn mineable(&self) -> bool;
 }
 
-struct CellColor {
+pub struct CellColor {
     r: u8,
     g: u8,
     b: u8,

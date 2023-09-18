@@ -13,3 +13,4 @@ tokio = { version = "1.32.0", features = ["full"] }
 uuid = { version = "1.4.1", features = ["v4"] }
 bracket-noise = "0.8.7"
 image = "0.24.7"
+noop-waker = "0.1.0"

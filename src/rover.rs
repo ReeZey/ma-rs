@@ -1,13 +1,13 @@
-use std::sync::Arc;
+use std::{sync::Arc, cell};
 use tokio::sync::Mutex;
-use crate::planet::{Planet, CellType};
+use crate::planet::{Planet, CellType, CellTrait};
 
 #[derive(Debug, Clone)]
 pub struct Rover {
     pub username: String,
     pub password: String,
-    pub x: i32,
-    pub y: i32,
+    pub x: u32,
+    pub y: u32,
     pub rotation: Compass,
     pub points: u32,
     pub planet: Option<Arc<Mutex<Planet>>>,
@@ -33,8 +33,8 @@ impl Rover {
             return;
         }
 
-        self.x = new_posotion.x;
-        self.y = new_posotion.y;
+        self.x = new_posotion.x as u32;
+        self.y = new_posotion.y as u32;
     }
     pub async fn rotate(&mut self, clockwise: bool) {
         if clockwise {
@@ -63,34 +63,34 @@ impl Rover {
         match self.rotation {
             Compass::North => {
                 for index in -2..3 {
-                    scanline += &planet.get_cell_type((self.x as i32 - index) as u32, self.y as u32 - 2).this_is_a_very_bad_fix();
+                    scanline += &planet.get_cell_type((self.x as i32 + index) as u32, self.y as u32 - 2).this_is_a_very_bad_fix();
                 }
                 for index in -1..2 {
-                    scanline += &planet.get_cell_type((self.x as i32 - index) as u32, self.y as u32 - 1).this_is_a_very_bad_fix();
+                    scanline += &planet.get_cell_type((self.x as i32 + index) as u32, self.y as u32 - 1).this_is_a_very_bad_fix();
                 }
             },
             Compass::East => {
                 for index in -2..3 {
-                    scanline += &planet.get_cell_type(self.x as u32 + 2, (self.y + index) as u32).this_is_a_very_bad_fix();
+                    scanline += &planet.get_cell_type(self.x + 2, (self.y as i32 + index) as u32).this_is_a_very_bad_fix();
                 }
                 for index in -1..2 {
-                    scanline += &planet.get_cell_type(self.x as u32 + 1, (self.y + index) as u32).this_is_a_very_bad_fix();
+                    scanline += &planet.get_cell_type(self.x as u32 + 1, (self.y as i32 + index) as u32).this_is_a_very_bad_fix();
                 }
             },
             Compass::South => {
                 for index in -2..3 {
-                    scanline += &planet.get_cell_type((self.x as i32 - index) as u32, self.y as u32 + 2).this_is_a_very_bad_fix();
+                    scanline += &planet.get_cell_type((self.x as i32 + index) as u32, self.y as u32 + 2).this_is_a_very_bad_fix();
                 }
                 for index in -1..2 {
-                    scanline += &planet.get_cell_type((self.x as i32 - index) as u32, self.y as u32 + 1).this_is_a_very_bad_fix();
+                    scanline += &planet.get_cell_type((self.x as i32 + index) as u32, self.y as u32 + 1).this_is_a_very_bad_fix();
                 }
             },
             Compass::West => {
                 for index in -2..3 {
-                    scanline += &planet.get_cell_type((self.x as i32 - 2) as u32, (self.y - index) as u32).this_is_a_very_bad_fix();
+                    scanline += &planet.get_cell_type((self.x as i32 - 2) as u32, (self.y as i32 + index) as u32).this_is_a_very_bad_fix();
                 }
                 for index in -1..2 {
-                    scanline += &planet.get_cell_type((self.x as i32 - 1) as u32, (self.y - index) as u32).this_is_a_very_bad_fix();
+                    scanline += &planet.get_cell_type((self.x as i32 - 1) as u32, (self.y as i32 + index) as u32).this_is_a_very_bad_fix();
                 }
             },
         }
@@ -107,14 +107,16 @@ impl Rover {
             Compass::West => Vector2 {x: -1, y: 0},
         };
 
-        let cell_front = planet.get_cell((self.x + motion.x) as u32, (self.y + motion.y) as u32);
+        let cell_front = planet.get_cell((self.x as i32 + motion.x) as u32, (self.y as i32 + motion.y) as u32);
+        
+        println!("front: {:#?}", cell_front);
+
         if cell_front.is_none() {
             return;
         }
         let cell_front = cell_front.unwrap();
 
-
-        if cell_front.cell_type != CellType::Rock && cell_front.cell_type != CellType::Stone {
+        if !cell_front.cell_type.mineable() {
             return;
         }
         
@@ -152,7 +154,7 @@ struct Vector2 {
 }
 
 impl Rover {
-    pub fn new(username: String, password: String, x: i32, y: i32, planet: Arc<Mutex<Planet>>) -> Self {
+    pub fn new(username: String, password: String, x: u32, y: u32, planet: Arc<Mutex<Planet>>) -> Self {
         Self { username, password, x, y, planet: Some(planet), ..Default::default() }
     }
 }

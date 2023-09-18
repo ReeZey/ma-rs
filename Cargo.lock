@@ -392,6 +392,7 @@ dependencies = [
  "bracket-noise",
  "flume 0.11.0",
  "image",
+ "noop-waker",
  "rand",
  "strum",
  "tokio",
@@ -442,6 +443,12 @@ checksum = "6a51313c5820b0b02bd422f4b44776fbf47961755c74ce64afc73bfad10226c3"
 dependencies = [
  "getrandom",
 ]
+
+[[package]]
+name = "noop-waker"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56902c3f29ce7afbecc1d088dfd2e3108033f3c02041c70788ed94280a3d5261"
 
 [[package]]
 name = "num-integer"

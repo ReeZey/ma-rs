@@ -17,9 +17,11 @@ use client::handle_client;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+static PLANET_SIZE: u32 = 20;
+
 #[tokio::main]
 async fn main() {
-    let mars = Planet::new(100);
+    let mars = Planet::new(PLANET_SIZE);
     
     let cells =  mars.cells();
     let air_cells: Vec<&Cell> = cells.iter().filter(|a| a.cell_type == CellType::Air).collect();
@@ -38,7 +40,7 @@ async fn main() {
 
     let server_uuid = Uuid::new_v4();
 
-    let mut img: RgbImage = ImageBuffer::new(100, 100);
+    let mut img: RgbImage = ImageBuffer::new(PLANET_SIZE, PLANET_SIZE);
     img.copy_from_slice(&mars.color_buffer());
     img.save("world.png").unwrap();
 
@@ -89,8 +91,8 @@ async fn main() {
         let command = args.pop_front().unwrap();
 
         let index = get_client_index(&clients, message.author).await.unwrap();
-        let mut clients = clients.lock().await;
-        let client = clients.get_mut(index).unwrap();
+        let mut clients_mutex = clients.lock().await;
+        let client = clients_mutex.get_mut(index).unwrap();
         
         if client.rover.is_none() {
             if command != "login" {
@@ -131,7 +133,7 @@ async fn main() {
                 let mut rng = rand::thread_rng();
                 let spawnpoint = empty_spots.get(rng.gen_range(0..empty_spots.len())).unwrap();
     
-                client.rover = Some(Rover::new(args[0].to_owned(), args[1].to_owned(), spawnpoint.x as i32, spawnpoint.y as i32, mars.clone()));
+                client.rover = Some(Rover::new(args[0].to_owned(), args[1].to_owned(), spawnpoint.x, spawnpoint.y, mars.clone()));
             }
 
             println!("{:?} just logged on", args[0]);
@@ -141,6 +143,10 @@ async fn main() {
         let rover = client.rover.as_mut().unwrap();
 
         println!("{}: {} {:?}", rover.username, command, args);
+
+        let mut planet = mars.lock().await;
+        planet.set_celltype(rover.x, rover.y, CellType::Air);
+        drop(planet);
 
         match command {
             "position" => {
@@ -163,6 +169,27 @@ async fn main() {
                 println!("unknown command: {:?} {:?}", command, args);
             }
         }
+
+        let mut planet = mars.lock().await;
+        planet.set_celltype(rover.x, rover.y, CellType::Rover);
+
+        /*
+        let mut rovers = vec![];
+
+        let clients = clients.lock().await;
+        rovers.extend(offline_rovers.clone());
+        for client in clients.iter() {
+            if client.rover.is_some() {
+                rovers.push(client.rover.clone().unwrap());
+            }
+        }
+        
+        planet.update_rovers(rovers);
+        */
+
+        let mut img: RgbImage = ImageBuffer::new(PLANET_SIZE, PLANET_SIZE);
+        img.copy_from_slice(&planet.color_buffer());
+        img.save("world.png").unwrap();
     }
 }
 
@@ -183,6 +210,7 @@ pub struct Message {
     data: Vec<u8>,
 }
 
+#[derive(Debug)]
 pub struct Client {
     uuid: Uuid,
     rover: Option<Rover>,
