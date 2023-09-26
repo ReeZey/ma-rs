@@ -39,6 +39,7 @@ async fn main() {
     let server = TcpListener::bind("0.0.0.0:6969").await.unwrap();
 
     let server_uuid = Uuid::new_v4();
+    println!("server uuid: {}", server_uuid);
 
     let mut img: RgbImage = ImageBuffer::new(PLANET_SIZE, PLANET_SIZE);
     img.copy_from_slice(&mars.color_buffer());
@@ -52,9 +53,9 @@ async fn main() {
         loop {
             let (stream, _sock_addr) = server.accept().await.unwrap();
 
-            let uuid = Uuid::new_v4();
-            client_pusher.lock().await.push(Client { uuid, rover: None });
-            handle_client(stream, uuid, sender.clone(), receiver.clone(), server_uuid);
+            let client_uuid = Uuid::new_v4();
+            client_pusher.lock().await.push(Client { uuid: client_uuid, rover: None });
+            handle_client(stream, client_uuid, server_uuid, sender.clone(), receiver.clone());
         }
     });
 
@@ -85,7 +86,6 @@ async fn main() {
         };
 
         //println!("{:?}", message_string);
-
 
         let mut args: VecDeque<&str> = message_string.split(" ").collect();
         let command = args.pop_front().unwrap();
@@ -149,7 +149,7 @@ async fn main() {
         drop(planet);
 
         match command {
-            "position" => {
+            "p" => {
                 let message = rover.position();
                 sender.send(Message { author: server_uuid, target: client.uuid, data: message.as_bytes().to_vec() }).unwrap();
             },
@@ -161,7 +161,7 @@ async fn main() {
                 sender.send(Message { author: server_uuid, target: client.uuid, data: scan.as_bytes().to_vec() }).unwrap();
             }
             "dig" => rover.dig().await,
-            "disconnected" => {
+            "disconnect" => {
                 println!("{:?} just logged off", rover.username);
                 offline_rovers.push(rover.clone());
             }
@@ -172,6 +172,8 @@ async fn main() {
 
         let mut planet = mars.lock().await;
         planet.set_celltype(rover.x, rover.y, CellType::Rover);
+        let img_buffer = planet.color_buffer().clone();
+        drop(planet);
 
         /*
         let mut rovers = vec![];
@@ -187,9 +189,11 @@ async fn main() {
         planet.update_rovers(rovers);
         */
 
-        let mut img: RgbImage = ImageBuffer::new(PLANET_SIZE, PLANET_SIZE);
-        img.copy_from_slice(&planet.color_buffer());
-        img.save("world.png").unwrap();
+        tokio::spawn(async move {
+            let mut img: RgbImage = ImageBuffer::new(PLANET_SIZE, PLANET_SIZE);
+            img.copy_from_slice(&img_buffer);
+            img.save("world.png").unwrap();
+        });
     }
 }
 

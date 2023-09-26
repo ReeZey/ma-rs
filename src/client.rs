@@ -1,63 +1,60 @@
-use std::{time::Duration, sync::Arc};
-
+use std::{time::Duration, io::ErrorKind};
 use flume::{Receiver, Sender};
-use tokio::{net::TcpStream, io::{AsyncReadExt, AsyncWriteExt}, sync::Mutex};
+use tokio::{net::TcpStream, io::Interest};
 use uuid::Uuid;
 use crate::Message;
 
-pub fn handle_client(stream: TcpStream, uuid: Uuid, send: Sender::<Message>, recv: Receiver<Message>, server_uuid: Uuid) {
-    let accessor = Arc::new(Mutex::new(stream));
-    let alive = Arc::new(Mutex::new(true));
-
-    let client_alive = alive.clone();
-    let writer = accessor.clone();
-    tokio::spawn(async move {
-        while *client_alive.lock().await {
-            let message = match recv.recv_timeout(Duration::from_millis(50)) {
-                Ok(message) => message,
-                Err(_) => continue,
-            };
-
-            if message.target != uuid {
-                continue;
-            }
-
-            //println!("received: {:?}", message.data);
-            println!("i sent this: {:?}", String::from_utf8(message.data.clone()).unwrap());
-
-            let mut abc = writer.lock().await;
-            abc.write(&message.data).await.unwrap();
-            abc.flush().await.unwrap();
-        }
-    });
-
-    //aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-    let reader = accessor.clone();
+pub fn handle_client(stream: TcpStream, uuid: Uuid, server_uuid: Uuid, send: Sender::<Message>, recv: Receiver<Message>) {
     tokio::spawn(async move {
         loop {
-            let mut buffer = vec![];
+            let ready = stream.ready(Interest::READABLE | Interest::WRITABLE).await.unwrap();
 
-            let mut reader = reader.lock().await;
-            match reader.read_buf(&mut buffer).await {
-                Ok(_) => {},
-                Err(error) => {
-                    //TODO: better fix sometime maybe perhabs nah
-                    send.send_async(Message { author: uuid, target: server_uuid, data: format!("disconnected {}", error.kind().to_string().replace(" ", "_")).as_bytes().to_vec() }).await.unwrap();
-                    //println!("user disconnected: {}", error.kind());
-                    break;
+            if ready.is_readable() {
+                let mut data = vec![0; 1024];
+
+                match stream.try_read(&mut data) {
+                    Ok(n) => {
+                        println!("read {} bytes", n);
+                        send.send_async(Message { author: uuid, target: server_uuid, data: data[0..n].to_vec() }).await.unwrap();
+                    }
+                    Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                        //println!("block");
+                    }
+                    Err(e) => {
+                        println!("read error: {}", e.kind());
+                        break;
+                    }
                 }
-            };
-
-            if buffer.len() == 0 {
-                continue;
             }
-    
-            //println!("{:?}", buffer);
-    
-            send.send_async(Message { author: uuid, target: server_uuid, data: buffer }).await.unwrap();
-        }
 
-        *alive.lock().await = false;
+            if ready.is_writable() {
+                let message = match recv.recv_timeout(Duration::from_millis(50)) {
+                    Ok(message) => message,
+                    Err(_) => {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                        continue
+                    },
+                };
+
+                if message.target != uuid {
+                    continue;
+                }
+                println!("yo3");
+                println!("{:#?}", message);
+                
+                match stream.try_write(&message.data) {
+                    Ok(n) => {
+                        println!("write {} bytes", n);
+                    }
+                    Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                        continue
+                    }
+                    Err(e) => {
+                        println!("write error: {}", e.kind());
+                        break;
+                    }
+                }
+            }
+        }
     });
-    //return Client { uuid, send }
 }
