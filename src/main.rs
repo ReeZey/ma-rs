@@ -173,28 +173,11 @@ async fn main() {
 
         let mut planet = mars.lock().await;
         planet.set_celltype(rover.x, rover.y, CellType::Rover);
-        let img_buffer = planet.color_buffer().clone();
-        drop(planet);
-
         /*
-        let mut rovers = vec![];
-
-        let clients = clients.lock().await;
-        rovers.extend(offline_rovers.clone());
-        for client in clients.iter() {
-            if client.rover.is_some() {
-                rovers.push(client.rover.clone().unwrap());
-            }
-        }
-        
-        planet.update_rovers(rovers);
+        let mut img: RgbImage = ImageBuffer::new(PLANET_SIZE, PLANET_SIZE);
+        img.copy_from_slice(&planet.color_buffer());
+        img.save("world.png").unwrap();
         */
-
-        tokio::spawn(async move {
-            let mut img: RgbImage = ImageBuffer::new(PLANET_SIZE, PLANET_SIZE);
-            img.copy_from_slice(&img_buffer);
-            img.save("world.png").unwrap();
-        });
     }
 }
 

@@ -17,8 +17,16 @@ pub fn handle_client(stream: TcpStream, uuid: Uuid, server_uuid: Uuid, send: Sen
                 match stream.try_read(&mut data) {
                     Ok(n) => {
                         if n != 0 {
-                            println!("read {} bytes", n);
-                            send.send(Message { author: uuid, target: server_uuid, data: data[0..n].to_vec(), response: Some(client_send.clone()) }).unwrap();
+                            let data = data[0..n].to_vec();
+
+                            let line = match String::from_utf8(data.clone()) {
+                                Ok(line) => line,
+                                Err(_) => "not utf8".to_owned(),
+                            };
+
+                            println!("read {} bytes, {:X?}, {:?}", data.len(), data, line);
+                            
+                            send.send(Message { author: uuid, target: server_uuid, data, response: Some(client_send.clone()) }).unwrap();
                         }
                     }
                     Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
@@ -34,10 +42,10 @@ pub fn handle_client(stream: TcpStream, uuid: Uuid, server_uuid: Uuid, send: Sen
             tokio::time::sleep(Duration::from_millis(10)).await;
 
             if ready.is_writable() {
-                let message = match client_recv.recv_timeout(Duration::from_millis(50)) {
+                let message = match client_recv.recv_timeout(Duration::from_millis(10)) {
                     Ok(message) => message,
                     Err(_) => {
-                        continue
+                        continue;
                     },
                 };
 
@@ -45,12 +53,15 @@ pub fn handle_client(stream: TcpStream, uuid: Uuid, server_uuid: Uuid, send: Sen
                     continue;
                 }
                 
+                let line = String::from_utf8(message.data.clone()).unwrap();
+                println!("test: {:?}", line);
+                
                 match stream.try_write(&message.data) {
                     Ok(n) => {
                         println!("write {} bytes", n);
                     }
                     Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                        continue
+                        continue;
                     }
                     Err(e) => {
                         println!("write error: {}", e.kind());

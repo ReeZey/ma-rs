@@ -7,12 +7,9 @@ use bracket_noise::prelude::FastNoise;
 use rand::Rng;
 use strum::EnumIter;
 
-use crate::rover::Rover;
-
 #[derive(Debug)]
 pub struct Planet {
     cells: Vec<Cell>,
-    rovers: Vec<Rover>,
     size: u32
 }
 
@@ -59,12 +56,11 @@ impl Planet {
                     }
                 }
 
-                cells.push(Cell::new(cell_type, x, y));
+                cells.push(Cell::new(cell_type, x as i32, y as i32));
             }
         }
         return Planet {
             cells,
-            rovers: vec![],
             size
         }
     }
@@ -97,35 +93,35 @@ impl Planet {
         return buffer;
     }
 
-    pub fn get_cell(&self, x: u32, y: u32) -> Option<&Cell>  {
+    pub fn get_cell(&self, x: i32, y: i32) -> Option<&Cell>  {
+        if x < 0 || y < 0 {
+            return None;
+        }
+        
         return self.cells.get(x as usize + y as usize * self.size as usize);
     }
 
-    pub fn get_cell_type(&self, x: u32, y: u32) -> CellType  {
+    pub fn get_cell_type(&self, x: i32, y: i32) -> CellType  {
         return match self.get_cell(x, y) {
             Some(cell) => cell.cell_type,
             None => CellType::Bedrock,
         };
     }
 
-    pub fn set_celltype(&mut self, x: u32, y: u32, cell_type: CellType) {
+    pub fn set_celltype(&mut self, x: i32, y: i32, cell_type: CellType) {
         self.cells[x as usize + y as usize * self.size as usize].cell_type = cell_type;
-    }
-    
-    pub fn update_rovers(&mut self, rovers: Vec<Rover>) {
-        self.rovers = rovers;
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct Cell {
     pub cell_type: CellType,
-    pub x: u32,
-    pub y: u32,
+    pub x: i32,
+    pub y: i32,
 }
 
 impl Cell {
-    pub fn new(cell_type: CellType, x: u32, y: u32) -> Cell {
+    pub fn new(cell_type: CellType, x: i32, y: i32) -> Cell {
         return Cell { cell_type, x, y };
     }
 }
@@ -174,13 +170,6 @@ impl CellTrait for CellType {
             CellType::Water => false,
             CellType::Rover => false,
         }
-    }
-}
-
-//TODO: better fix sometime
-impl CellType {
-    pub fn this_is_a_very_bad_fix(&self) -> String {
-        return format!("{}", self);
     }
 }
 
