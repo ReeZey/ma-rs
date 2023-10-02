@@ -5,6 +5,7 @@ mod rover;
 use std::collections::VecDeque;
 use std::fs;
 use std::sync::Arc;
+use flume::Sender;
 use image::ImageBuffer;
 use image::RgbImage;
 use planet::Planet;
@@ -48,23 +49,23 @@ async fn main() {
     let message_channel = flume::unbounded::<Message>();
     
     let client_pusher = clients.clone();
-    let (sender, receiver) = message_channel.clone();
+    let (sender, _) = message_channel.clone();
     tokio::spawn(async move {
         loop {
             let (stream, _sock_addr) = server.accept().await.unwrap();
 
             let client_uuid = Uuid::new_v4();
             client_pusher.lock().await.push(Client { uuid: client_uuid, rover: None });
-            handle_client(stream, client_uuid, server_uuid, sender.clone(), receiver.clone());
+            handle_client(stream, client_uuid, server_uuid, sender.clone());
         }
     });
 
     let mut offline_rovers: Vec<Rover> = vec![];
 
     let mars: Arc<Mutex<Planet>> = Arc::new(Mutex::new(mars));
-    let (sender, receiver) = message_channel;
+    let (_, receiver) = message_channel;
     loop {
-        let message = match receiver.recv_async().await {
+        let message = match receiver.recv() {
             Ok(message) => message,
             Err(_error) => {
                 //println!("hejsan {:?}", _error);
@@ -96,14 +97,14 @@ async fn main() {
         
         if client.rover.is_none() {
             if command != "login" {
-                sender.send(Message { author: server_uuid, target: client.uuid, data: "not signed in".as_bytes().to_vec() }).unwrap();
+                message.response.unwrap().send(Message { author: server_uuid, target: client.uuid, data: "not signed in".as_bytes().to_vec(), response: None }).unwrap();
                 continue;
             }
 
             println!("login: {:?}", args);
 
             if args.len() != 2 {
-                sender.send(Message { author: server_uuid, target: client.uuid, data: "login failed".as_bytes().to_vec() }).unwrap();
+                message.response.unwrap().send(Message { author: server_uuid, target: client.uuid, data: "login failed".as_bytes().to_vec(), response: None }).unwrap();
                 continue;
             }
 
@@ -120,7 +121,7 @@ async fn main() {
             if rover_index.is_some() {
                 let rover_index = rover_index.unwrap();
                 if offline_rovers[rover_index].password != args[1] {
-                    sender.send(Message { author: server_uuid, target: client.uuid, data: "login failed".as_bytes().to_vec() }).unwrap();
+                    message.response.unwrap().send(Message { author: server_uuid, target: client.uuid, data: "login failed".as_bytes().to_vec(), response: None }).unwrap();
                     continue;
                 }
                 let rover = offline_rovers.remove(rover_index);
@@ -137,7 +138,7 @@ async fn main() {
             }
 
             println!("{:?} just logged on", args[0]);
-            sender.send(Message { author: server_uuid, target: client.uuid, data: "login successful".as_bytes().to_vec() }).unwrap();
+            message.response.unwrap().send(Message { author: server_uuid, target: client.uuid, data: "login successful".as_bytes().to_vec(), response: None }).unwrap();
             continue;
         }
         let rover = client.rover.as_mut().unwrap();
@@ -149,16 +150,16 @@ async fn main() {
         drop(planet);
 
         match command {
-            "p" => {
-                let message = rover.position();
-                sender.send(Message { author: server_uuid, target: client.uuid, data: message.as_bytes().to_vec() }).unwrap();
+            "position" => {
+                let position = rover.position();
+                message.response.unwrap().send(Message { author: server_uuid, target: client.uuid, data: position.as_bytes().to_vec(), response: None }).unwrap();
             },
             "forward" => rover.forward().await,
             "turnleft" => rover.rotate(false).await,
             "turnright" => rover.rotate(true).await,
             "scan" => {
                 let scan: String = rover.scan().await;
-                sender.send(Message { author: server_uuid, target: client.uuid, data: scan.as_bytes().to_vec() }).unwrap();
+                message.response.unwrap().send(Message { author: server_uuid, target: client.uuid, data: scan.as_bytes().to_vec(), response: None }).unwrap();
             }
             "dig" => rover.dig().await,
             "disconnect" => {
@@ -212,6 +213,7 @@ pub struct Message {
     author: Uuid,
     target: Uuid,
     data: Vec<u8>,
+    response: Option<Sender<Message>>,
 }
 
 #[derive(Debug)]

@@ -1,11 +1,13 @@
 use std::{time::Duration, io::ErrorKind};
-use flume::{Receiver, Sender};
+use flume::Sender;
 use tokio::{net::TcpStream, io::Interest};
 use uuid::Uuid;
 use crate::Message;
 
-pub fn handle_client(stream: TcpStream, uuid: Uuid, server_uuid: Uuid, send: Sender::<Message>, recv: Receiver<Message>) {
+pub fn handle_client(stream: TcpStream, uuid: Uuid, server_uuid: Uuid, send: Sender::<Message>) {    
     tokio::spawn(async move {
+        let (client_send, client_recv) = flume::unbounded::<Message>();
+
         loop {
             let ready = stream.ready(Interest::READABLE | Interest::WRITABLE).await.unwrap();
 
@@ -14,8 +16,10 @@ pub fn handle_client(stream: TcpStream, uuid: Uuid, server_uuid: Uuid, send: Sen
 
                 match stream.try_read(&mut data) {
                     Ok(n) => {
-                        println!("read {} bytes", n);
-                        send.send_async(Message { author: uuid, target: server_uuid, data: data[0..n].to_vec() }).await.unwrap();
+                        if n != 0 {
+                            println!("read {} bytes", n);
+                            send.send(Message { author: uuid, target: server_uuid, data: data[0..n].to_vec(), response: Some(client_send.clone()) }).unwrap();
+                        }
                     }
                     Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                         //println!("block");
@@ -27,11 +31,12 @@ pub fn handle_client(stream: TcpStream, uuid: Uuid, server_uuid: Uuid, send: Sen
                 }
             }
 
+            tokio::time::sleep(Duration::from_millis(10)).await;
+
             if ready.is_writable() {
-                let message = match recv.recv_timeout(Duration::from_millis(50)) {
+                let message = match client_recv.recv_timeout(Duration::from_millis(50)) {
                     Ok(message) => message,
                     Err(_) => {
-                        tokio::time::sleep(Duration::from_millis(10)).await;
                         continue
                     },
                 };
@@ -39,8 +44,6 @@ pub fn handle_client(stream: TcpStream, uuid: Uuid, server_uuid: Uuid, send: Sen
                 if message.target != uuid {
                     continue;
                 }
-                println!("yo3");
-                println!("{:#?}", message);
                 
                 match stream.try_write(&message.data) {
                     Ok(n) => {
