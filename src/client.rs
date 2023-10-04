@@ -19,12 +19,12 @@ pub fn handle_client(stream: TcpStream, uuid: Uuid, server_uuid: Uuid, send: Sen
                         if n != 0 {
                             let data = data[0..n].to_vec();
 
-                            let line = match String::from_utf8(data.clone()) {
+                            let _line = match String::from_utf8(data.clone()) {
                                 Ok(line) => line,
                                 Err(_) => "not utf8".to_owned(),
                             };
 
-                            println!("read {} bytes, {:X?}, {:?}", data.len(), data, line);
+                            //println!("read {} bytes, {:X?}, {:?}", data.len(), data, line);
                             
                             send.send(Message { author: uuid, target: server_uuid, data, response: Some(client_send.clone()) }).unwrap();
                         }
@@ -53,12 +53,12 @@ pub fn handle_client(stream: TcpStream, uuid: Uuid, server_uuid: Uuid, send: Sen
                     continue;
                 }
                 
-                let line = String::from_utf8(message.data.clone()).unwrap();
-                println!("test: {:?}", line);
+                let _line = String::from_utf8(message.data.clone()).unwrap();
+                //println!("response: {:?}", line);
                 
                 match stream.try_write(&message.data) {
-                    Ok(n) => {
-                        println!("write {} bytes", n);
+                    Ok(_n) => {
+                        //println!("write {} bytes", n);
                     }
                     Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                         continue;

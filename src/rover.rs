@@ -109,7 +109,7 @@ impl Rover {
 
         let cell_front = planet.get_cell(self.x + motion.x, self.y + motion.y);
         
-        println!("front: {:#?}", cell_front);
+        //println!("front: {:#?}", cell_front);
 
         if cell_front.is_none() {
             return;
@@ -132,7 +132,7 @@ impl Rover {
         let cell_x = cell_front.x;
         let cell_y = cell_front.y;
 
-        println!("updated");
+        //println!("updated");
         planet.set_celltype(cell_x, cell_y, CellType::Air);
         self.points += price;
     }

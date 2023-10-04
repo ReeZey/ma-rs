@@ -173,11 +173,10 @@ async fn main() {
 
         let mut planet = mars.lock().await;
         planet.set_celltype(rover.x, rover.y, CellType::Rover);
-        /*
-        let mut img: RgbImage = ImageBuffer::new(PLANET_SIZE, PLANET_SIZE);
-        img.copy_from_slice(&planet.color_buffer());
-        img.save("world.png").unwrap();
-        */
+
+        //let mut img: RgbImage = ImageBuffer::new(PLANET_SIZE, PLANET_SIZE);
+        //img.copy_from_slice(&planet.color_buffer());
+        //img.save("world.png").unwrap();
     }
 }
 
