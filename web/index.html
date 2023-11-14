@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <canvas width="100" height="100" class="preview"></canvas>
+    <script>
+        let canvas = document.querySelector(".preview");
+        window.onload = async (event) => {
+            setInterval(async () => {
+                let response = await fetch("/planet");
+                let r_text = await response.text();
+
+                const ctx = canvas.getContext("2d");
+                let array = r_text.replaceAll("\n", "").split("");
+
+                let size = Math.floor(Math.sqrt(array.length));
+
+                for (let y = 0; y < size; y++) {
+                    for (let x = 0; x < size; x++) {
+                        let block = array[x + (y * size)];
+
+                        let color = char_to_color(block);
+
+                        ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+                        ctx.fillRect(x, y, 1, 1);
+                    }
+                }
+            }, 1000);
+        }
+
+        function char_to_color(color) {
+            switch(color) {
+                case " ":
+                    return [ 250, 165, 0 ]
+                case ".":
+                    return [ 128, 100, 64 ]
+                case "o":
+                    return [ 64, 64, 64 ]
+                case "X":
+                    return [ 0, 0, 0 ]
+                case "W":
+                    return [ 0, 0, 255 ]
+                case "R":
+                    return [ 255, 0, 0 ]
+            }
+
+            return [ 0, 0, 0 ];
+        }
+    </script>
+</body>
+</html>

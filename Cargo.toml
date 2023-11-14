@@ -13,3 +13,6 @@ tokio = { version = "1.32.0", features = ["full"] }
 uuid = { version = "1.4.1", features = ["v4"] }
 bracket-noise = "0.8.7"
 image = "0.24.7"
+axum = "0.6.20"
+axum-server = "0.5.1"
+tower-http = { version = "0.4.4", features = ["fs"] }

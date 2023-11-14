@@ -2,14 +2,12 @@ mod planet;
 mod client;
 mod rover;
 
-use std::collections::VecDeque;
-use std::fs;
-use std::sync::Arc;
+use std::{collections::VecDeque, fs};
+use std::{net::SocketAddr, sync::Arc};
 use flume::Sender;
 use image::ImageBuffer;
 use image::RgbImage;
-use planet::Planet;
-use planet::CellType;
+use planet::{Planet, CellType};
 use planet::Cell;
 use rand::Rng;
 use rover::Rover;
@@ -17,8 +15,10 @@ use tokio::net::TcpListener;
 use client::handle_client;
 use tokio::sync::Mutex;
 use uuid::Uuid;
+use axum::{routing::get, Router};
+use tower_http::services::ServeDir;
 
-static PLANET_SIZE: u32 = 20;
+static PLANET_SIZE: u32 = 100;
 
 #[tokio::main]
 async fn main() {
@@ -42,10 +42,12 @@ async fn main() {
     let server_uuid = Uuid::new_v4();
     println!("server uuid: {}", server_uuid);
 
+    /*
     let mut img: RgbImage = ImageBuffer::new(PLANET_SIZE, PLANET_SIZE);
     img.copy_from_slice(&mars.color_buffer());
     img.save("world.png").unwrap();
-
+    */
+    
     let message_channel = flume::unbounded::<Message>();
     
     let client_pusher = clients.clone();
@@ -60,9 +62,30 @@ async fn main() {
         }
     });
 
+    let mars: Arc<Mutex<Planet>> = Arc::new(Mutex::new(mars));
+    let mars_web = mars.clone();
+    //webclient
+    tokio::spawn(async move {
+        let app = Router::new()
+            .nest_service("/", ServeDir::new("web"))
+            .route("/planet", get(|| async {
+                let mars = mars_web.clone();
+                let abc =  mars.lock().await;
+                let response = abc.print_ascii();
+                drop(mars_web);
+                String::from_utf8(response).unwrap()
+             }));
+        
+        let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+        println!("listening on {}", addr);
+
+        axum_server::bind(addr)
+            .serve(app.into_make_service()).await.unwrap();
+    });
+
     let mut offline_rovers: Vec<Rover> = vec![];
 
-    let mars: Arc<Mutex<Planet>> = Arc::new(Mutex::new(mars));
+    
     let (_, receiver) = message_channel;
     loop {
         let message = match receiver.recv() {
@@ -118,23 +141,25 @@ async fn main() {
 
             println!("{:?}", rover_index);
 
-            if rover_index.is_some() {
-                let rover_index = rover_index.unwrap();
-                if offline_rovers[rover_index].password != args[1] {
-                    message.response.unwrap().send(Message { author: server_uuid, target: client.uuid, data: "login failed".as_bytes().to_vec(), response: None }).unwrap();
-                    continue;
-                }
-                let rover = offline_rovers.remove(rover_index);
+            match rover_index {
+                Some(rover_index) => {
+                    if offline_rovers[rover_index].password != args[1] {
+                        message.response.unwrap().send(Message { author: server_uuid, target: client.uuid, data: "login failed".as_bytes().to_vec(), response: None }).unwrap();
+                        continue;
+                    }
+                    let rover = offline_rovers.remove(rover_index);
 
-                client.rover = Some(rover);
-            } else {
-                let cells =  mars.lock().await.cells();
-                let empty_spots: Vec<&Cell> = cells.iter().filter(|a| a.cell_type == CellType::Air).collect();
-    
-                let mut rng = rand::thread_rng();
-                let spawnpoint = empty_spots.get(rng.gen_range(0..empty_spots.len())).unwrap();
-    
-                client.rover = Some(Rover::new(args[0].to_owned(), args[1].to_owned(), spawnpoint.x, spawnpoint.y, mars.clone()));
+                    client.rover = Some(rover);
+                },
+                None => {
+                    let cells =  mars.lock().await.cells();
+                    let empty_spots: Vec<&Cell> = cells.iter().filter(|a| a.cell_type == CellType::Air).collect();
+        
+                    let mut rng = rand::thread_rng();
+                    let spawnpoint = empty_spots.get(rng.gen_range(0..empty_spots.len())).unwrap();
+        
+                    client.rover = Some(Rover::new(args[0].to_owned(), args[1].to_owned(), spawnpoint.x, spawnpoint.y, mars.clone()));
+                },
             }
 
             println!("{:?} just logged on", args[0]);
@@ -173,10 +198,6 @@ async fn main() {
 
         let mut planet = mars.lock().await;
         planet.set_celltype(rover.x, rover.y, CellType::Rover);
-
-        //let mut img: RgbImage = ImageBuffer::new(PLANET_SIZE, PLANET_SIZE);
-        //img.copy_from_slice(&planet.color_buffer());
-        //img.save("world.png").unwrap();
     }
 }
 
