@@ -2,15 +2,14 @@ mod planet;
 mod client;
 mod rover;
 
-use std::{collections::VecDeque, fs};
+use std::collections::VecDeque;
 use std::{net::SocketAddr, sync::Arc};
 use flume::Sender;
-use image::ImageBuffer;
-use image::RgbImage;
 use planet::{Planet, CellType};
 use planet::Cell;
 use rand::Rng;
 use rover::Rover;
+use serde_json::json;
 use tokio::net::TcpListener;
 use client::handle_client;
 use tokio::sync::Mutex;
@@ -34,7 +33,7 @@ async fn main() {
     println!("--- planet stats ---");
     println!("air: {} rock: {} stone: {} water: {} bedrock: {}", air_cells.len(), rock_cells.len(), stone_cells.len(), water_cells.len(),  bedrock_cells.len());
 
-    fs::write("map.txt", mars.print_ascii()).unwrap();
+    //fs::write("map.txt", mars.print_ascii()).unwrap();
 
     let clients = Arc::new(Mutex::new(vec![]));
     let server = TcpListener::bind("0.0.0.0:6969").await.unwrap();
@@ -47,7 +46,7 @@ async fn main() {
     img.copy_from_slice(&mars.color_buffer());
     img.save("world.png").unwrap();
     */
-    
+
     let message_channel = flume::unbounded::<Message>();
     
     let client_pusher = clients.clone();
@@ -70,10 +69,14 @@ async fn main() {
             .nest_service("/", ServeDir::new("web"))
             .route("/planet", get(|| async {
                 let mars = mars_web.clone();
-                let abc =  mars.lock().await;
-                let response = abc.print_ascii();
+                let planet =  mars.lock().await;
+                let response = json!({
+                    "board": planet.color_buffer(),
+                    "planet_size": planet.size,
+                });
                 drop(mars_web);
-                String::from_utf8(response).unwrap()
+                
+                serde_json::to_string(&response).unwrap()
              }));
         
         let addr = SocketAddr::from(([0, 0, 0, 0], 3000));

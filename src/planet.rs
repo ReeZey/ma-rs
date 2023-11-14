@@ -10,7 +10,7 @@ use strum::EnumIter;
 #[derive(Debug)]
 pub struct Planet {
     cells: Vec<Cell>,
-    size: u32
+    pub size: u32
 }
 
 impl Planet {
@@ -69,6 +69,8 @@ impl Planet {
         return self.cells.clone();
     }
 
+    //TODO: maybe delete? will i need this?
+    #[allow(dead_code)]
     pub fn print_ascii(&self) -> Vec<u8> {
         let mut buffer: Vec<u8> = vec![];
         for (index, cell) in self.cells.iter().enumerate() {

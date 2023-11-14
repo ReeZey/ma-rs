@@ -1,5 +1,15 @@
+* {
+    padding: 0;
+    margin: 0;
+
+    background-color: rgb(128, 64, 0);
+    color: white;
+
+    text-align: center;
+}
+
 canvas {
-    width: 500px;
-    height: 500px;
+    width: min(90vw, 80vh);
+    height: min(90vw, 80vh);
     image-rendering: pixelated;
 }
